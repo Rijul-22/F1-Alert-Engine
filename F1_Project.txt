@@ -1,0 +1,41 @@
+F1 Real-Time Race Intelligence System (FRRIS)
+
+Objective:
+A real-time data processing system for Formula 1 race data using Apache Kafka. 
+Ingests simulated race events, processes them through multiple consumers, and lays the groundwork for AI-driven intelligence.
+
+Target Users:
+F1 enthusiasts, data analysts, broadcasters.
+
+Key Features:
+- Real-Time Event Ingestion (lap times, pit stops, overtakes, etc.)
+- Kafka Streaming Backbone (high throughput)
+- Multi-Consumer Processing (Strategy, Alert, AI, Storage)
+- Rule-Based Intelligence Engine (detects slow pit stops, performance drops)
+- AI-Based Explanation via Gemini (future scope)
+- Dashboard in Streamlit (future scope)
+
+Current Setup:
+We will initialize the basic backbone:
+1. `f1_producer.py` - Simulates events and publishes to Kafka.
+2. `f1_consumer.py` - Reads from Kafka and prints them to the console.
+
+Tech Stack:
+- Streaming Backbone: Apache Kafka (Confluent 7.2.1)
+- Containerization: Docker & Docker Compose
+- Programming Language: Python 3.x
+- Core Libraries: kafka-python, json, time, random
+- AI Engine: Gemini Pro API (Generative AI for race insights)
+- UI/Dashboard: Streamlit (Real-time data visualization)
+
+Kafka Requirements (Cascading Pipeline):
+1. race_events (Raw telemetry)
+2. strategy_events (Processed rule-based insights)
+3. alerts (Prioritized notifications)
+4. ai_insights (AI-generated human-readable explanations)
+
+To create all topics via Docker CLI (PowerShell):
+docker exec -it kafka kafka-topics --create --topic race_events --bootstrap-server localhost:9092 --partitions 3 --replication-factor 1
+docker exec -it kafka kafka-topics --create --topic strategy_events --bootstrap-server localhost:9092 --partitions 3 --replication-factor 1
+docker exec -it kafka kafka-topics --create --topic alerts --bootstrap-server localhost:9092 --partitions 3 --replication-factor 1
+docker exec -it kafka kafka-topics --create --topic ai_insights --bootstrap-server localhost:9092 --partitions 3 --replication-factor 1
