@@ -1,25 +1,7 @@
-import os
 import json
 import time
+import random
 from kafka import KafkaConsumer, KafkaProducer
-try:
-    import google.generativeai as genai
-    from dotenv import load_dotenv
-except ImportError:
-    print("Missing requirements! Please run: pip install google-generativeai python-dotenv")
-    exit(1)
-
-# Load environment variables (API Key)
-load_dotenv()
-API_KEY = os.getenv("GEMINI_API_KEY")
-
-if not API_KEY or API_KEY == "your_api_key_here":
-    print("ERROR: GEMINI_API_KEY is not set in the .env file!")
-    exit(1)
-
-# Configure Gemini AI
-genai.configure(api_key=API_KEY)
-model = genai.GenerativeModel('gemini-1.5-flash')
 
 # Topics
 INPUT_TOPIC = 'alerts'
@@ -42,32 +24,43 @@ producer = KafkaProducer(
     value_serializer=lambda v: json.dumps(v).encode('utf-8')
 )
 
-print(f"Starting F1 AI Consumer (Gemini Engine).")
-print(f"Listening to '{INPUT_TOPIC}' -> Publishing AI Commentary to '{OUTPUT_TOPIC}'...\n")
+print(f"Starting F1 AI Consumer (Local Broadcaster Engine).")
+print(f"Listening to '{INPUT_TOPIC}' -> Publishing Contextual Commentary to '{OUTPUT_TOPIC}'...\n")
 
 def generate_ai_commentary(alert_data):
-    """Hits the Gemini API to convert raw data into a broadcaster-style insight."""
+    """Local Mock AI to bypass all Rate Limits for the demonstration."""
     driver = alert_data.get('driver_id')
     priority = alert_data.get('priority')
     message = alert_data.get('alert_message')
     
-    prompt = f"""
-    You are an expert Formula 1 commentator like Martin Brundle. 
-    You have just received this telemetry alert for a driver:
-    Driver: {driver}
-    Severity: {priority}
-    Telemetry Trigger: {message}
+    # Simulate a tiny processing delay
+    time.sleep(1)
     
-    Write a short, engaging 1-2 sentence live broadcast commentary reacting to this event.
-    No hashtags, keep it professional but exciting.
-    """
-    
-    try:
-        response = model.generate_content(prompt)
-        return response.text.strip()
-    except Exception as e:
-        print(f"Gemini API Error: {e}")
-        return "Broadcaster AI temporarily offline."
+    if "pit stop" in message.lower():
+        templates = [
+            f"Oh dear, a painfully slow stop for {driver}! The mechanics are struggling, and that's going to cost them dearly out on track.",
+            f"Disaster in the pit lane for {driver}! Every second feels like a lifetime when you're strapped in there watching the clock.",
+            f"{driver} is stationary for far too long! The team has really fumbled that tire change."
+        ]
+    elif "position" in message.lower() or "aggressive move" in message.lower():
+        templates = [
+            f"Brilliant driving from {driver}! They've sent it down the inside and made up crucial places!",
+            f"Look at {driver} go! That is absolute maximum commitment to slice through the field like that.",
+            f"What a sensational and aggressive move by {driver}! They are showing no fear out there today."
+        ]
+    elif "performance" in message.lower() or "lap time" in message.lower():
+        templates = [
+            f"The telemetry doesn't lie, {driver} is bleeding lap time here. Are the tires falling off the cliff?",
+            f"We are seeing a significant drop in pace from {driver}. The team needs to figure out this performance issue immediately.",
+            f"{driver} is struggling for grip out there! The lap times are drifting away from the front runners."
+        ]
+    else:
+        templates = [
+            f"Big drama surrounding {driver} right now, we need to keep a close eye on this situation!",
+            f"Unbelievable scenes! {driver} is right in the thick of the action right now."
+        ]
+        
+    return random.choice(templates)
 
 try:
     for message in consumer:
