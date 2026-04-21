@@ -5,7 +5,9 @@ from kafka import KafkaConsumer, KafkaProducer
 # Topics
 INPUT_TOPIC = 'race_events'
 OUTPUT_TOPIC = 'strategy_events'
+DLQ_TOPIC = 'failed_events'
 KAFKA_BROKER = 'localhost:9092'
+MAX_RETRIES = 3
 
 # Initialize Consumer
 consumer = KafkaConsumer(
@@ -13,8 +15,8 @@ consumer = KafkaConsumer(
     bootstrap_servers=KAFKA_BROKER,
     auto_offset_reset='earliest',
     enable_auto_commit=True,
-    group_id='strategy_engine_group',
-    value_deserializer=lambda x: json.loads(x.decode('utf-8'))
+    group_id='strategy_engine_group'
+    # Removed value_deserializer to handle raw bytes manually and catch parsing errors
 )
 
 # Initialize Producer for the next topic
@@ -87,17 +89,41 @@ def process_event(event):
 
 try:
     for message in consumer:
-        raw_event = message.value
+        raw_event_bytes = message.value
+        success = False
+        last_error = None
         
-        # Apply the rules
-        insight = process_event(raw_event)
-        
-        if insight:
-            # Output the insight locally
-            print(f"[{insight['driver_id']}] INSIGHT -> {insight['strategy']['message']}")
-            
-            # Forward the insight down the pipeline
-            producer.send(OUTPUT_TOPIC, key=insight['driver_id'].encode('utf-8'), value=insight)
+        for attempt in range(MAX_RETRIES):
+            try:
+                # 1. Deserialize within the try block to gracefully handle JSON parse errors
+                raw_event = json.loads(raw_event_bytes.decode('utf-8'))
+                
+                # 2. Apply the rules
+                insight = process_event(raw_event)
+                
+                if insight:
+                    # Output the insight locally
+                    print(f"[{insight['driver_id']}] INSIGHT -> {insight['strategy']['message']}")
+                    
+                    # Forward the insight down the pipeline
+                    producer.send(OUTPUT_TOPIC, key=insight['driver_id'].encode('utf-8'), value=insight)
+                
+                success = True
+                break
+                
+            except Exception as e:
+                last_error = str(e)
+                print(f"[Warning] Error processing message in strategy_consumer: {e}. Retry {attempt + 1}/{MAX_RETRIES}")
+                time.sleep(1)
+                
+        if not success:
+            print(f"[Error] Message failed after {MAX_RETRIES} retries. Routing to DLQ: {DLQ_TOPIC}")
+            dlq_message = {
+                "consumer": "strategy_engine_group",
+                "error": last_error,
+                "raw_message": raw_event_bytes.decode('utf-8', errors='replace')
+            }
+            producer.send(DLQ_TOPIC, key=b'dlq', value=dlq_message)
             
 except KeyboardInterrupt:
     print("\nStrategy Consumer stopped.")
