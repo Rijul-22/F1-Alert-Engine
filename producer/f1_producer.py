@@ -7,6 +7,7 @@ from kafka import KafkaProducer
 # We are using the existing Kafka container running on localhost:9092
 producer = KafkaProducer(
     bootstrap_servers='localhost:9092',
+    api_version=(2, 8, 1),
     value_serializer=lambda v: json.dumps(v).encode('utf-8')
 )
 
@@ -124,7 +125,7 @@ try:
         print(f"Produced: {race_event}")
         
         # Sleep to simulate real-time stream
-        time.sleep(random.uniform(0.5, 2.0))
+        time.sleep(4)
         
 except KeyboardInterrupt:
     print("\nProducer stopped.")
