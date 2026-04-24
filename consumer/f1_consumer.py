@@ -13,12 +13,14 @@ consumer = KafkaConsumer(
     bootstrap_servers='localhost:9092',
     auto_offset_reset='earliest',  # start reading from earliest message if no offset is committed
     enable_auto_commit=True,
-    group_id='f1_base_consumer_group'
+    group_id='f1_base_consumer_group',
+    api_version=(2, 8, 1)
     # Removed value_deserializer
 )
 
 producer = KafkaProducer(
     bootstrap_servers='localhost:9092',
+    api_version=(2, 8, 1),
     value_serializer=lambda v: json.dumps(v).encode('utf-8')
 )
 
