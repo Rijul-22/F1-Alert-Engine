@@ -10,7 +10,12 @@ import json
 import time
 import random
 import uuid
+import os
 from kafka import KafkaConsumer, KafkaProducer
+from dotenv import load_dotenv
+
+# Load environment variables from .env
+load_dotenv()
 
 # ── Configuration ──────────────────────────────────────────────────
 INPUT_TOPIC = 'race_events'
@@ -18,6 +23,11 @@ OUTPUT_TOPIC = 'ai_insights'
 DLQ_TOPIC = 'failed_events'
 KAFKA_BROKER = 'localhost:9092'
 MAX_RETRIES = 3
+
+# ── Rule Engine Thresholds (from .env) ────────────────────────────
+SLOW_PIT_THRESHOLD = float(os.getenv('SLOW_PIT_THRESHOLD_SECONDS', 3.0))
+LAP_DROP_THRESHOLD = float(os.getenv('LAP_DROP_THRESHOLD_SECONDS', 0.5))
+AGGRESSIVE_MOVE_THRESHOLD = int(os.getenv('AGGRESSIVE_MOVE_POSITION_GAIN', 2))
 
 # ── Kafka Setup ────────────────────────────────────────────────────
 consumer = KafkaConsumer(
@@ -40,6 +50,7 @@ print("🏎️  F1 UNIFIED CONSUMER")
 print(f"    Reading from: '{INPUT_TOPIC}'")
 print(f"    Publishing to: '{OUTPUT_TOPIC}'")
 print("    Pipeline: Strategy Rules → Priority → AI Commentary")
+print(f"    [Config] Slow Pit: >{SLOW_PIT_THRESHOLD}s | Lap Drop: >{LAP_DROP_THRESHOLD}s | Aggressive Move: >={AGGRESSIVE_MOVE_THRESHOLD} pos")
 print("=" * 60 + "\n")
 
 # ── State ──────────────────────────────────────────────────────────
@@ -56,7 +67,7 @@ def apply_strategy_rules(event):
 
     if event_type == "pit_stop":
         duration = event.get('pit_stop_duration', 0)
-        if duration > 3.0:
+        if duration > SLOW_PIT_THRESHOLD:
             strategy_insight = {
                 "insight_type": "slow_pit",
                 "message": f"Slow pit stop detected: {duration} seconds.",
@@ -66,7 +77,7 @@ def apply_strategy_rules(event):
 
     elif event_type == "position_change":
         gained = event.get('position_gained', 0)
-        if gained >= 2:
+        if gained >= AGGRESSIVE_MOVE_THRESHOLD:
             strategy_insight = {
                 "insight_type": "aggressive_move",
                 "message": f"Aggressive move! Gained {gained} positions.",
@@ -80,7 +91,7 @@ def apply_strategy_rules(event):
         driver_lap_state[driver] = current_lap
 
         if previous_lap is not None:
-            if current_lap > previous_lap + 0.5:
+            if current_lap > previous_lap + LAP_DROP_THRESHOLD:
                 strategy_insight = {
                     "insight_type": "performance_drop",
                     "message": f"Performance drop: Lap time increased by {round(current_lap - previous_lap, 2)}s compared to previous lap.",
