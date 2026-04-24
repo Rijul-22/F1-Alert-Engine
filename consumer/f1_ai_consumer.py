@@ -16,13 +16,15 @@ consumer = KafkaConsumer(
     bootstrap_servers=KAFKA_BROKER,
     auto_offset_reset='earliest',
     enable_auto_commit=True,
-    group_id='ai_commentary_group'
+    group_id='ai_commentary_group',
+    api_version=(2, 8, 1)
     # Removed value_deserializer
 )
 
 # Initialize Producer
 producer = KafkaProducer(
     bootstrap_servers=KAFKA_BROKER,
+    api_version=(2, 8, 1),
     value_serializer=lambda v: json.dumps(v).encode('utf-8')
 )
 
