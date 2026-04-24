@@ -1,6 +1,11 @@
 import json
 import time
+import os
 from kafka import KafkaConsumer, KafkaProducer
+from dotenv import load_dotenv
+
+# Load environment variables from .env
+load_dotenv()
 
 # Topics
 INPUT_TOPIC = 'race_events'
@@ -9,19 +14,28 @@ DLQ_TOPIC = 'failed_events'
 KAFKA_BROKER = 'localhost:9092'
 MAX_RETRIES = 3
 
+# --- Rule Engine Thresholds (loaded from .env) ---
+SLOW_PIT_THRESHOLD = float(os.getenv('SLOW_PIT_THRESHOLD_SECONDS', 3.0))
+LAP_DROP_THRESHOLD = float(os.getenv('LAP_DROP_THRESHOLD_SECONDS', 0.5))
+AGGRESSIVE_MOVE_THRESHOLD = int(os.getenv('AGGRESSIVE_MOVE_POSITION_GAIN', 2))
+
+print(f"[Config] Thresholds loaded — Slow Pit: >{SLOW_PIT_THRESHOLD}s | Lap Drop: >{LAP_DROP_THRESHOLD}s | Aggressive Move: >={AGGRESSIVE_MOVE_THRESHOLD} positions")
+
 # Initialize Consumer
 consumer = KafkaConsumer(
     INPUT_TOPIC,
     bootstrap_servers=KAFKA_BROKER,
     auto_offset_reset='earliest',
     enable_auto_commit=True,
-    group_id='strategy_engine_group'
+    group_id='strategy_engine_group',
+    api_version=(2, 8, 1)
     # Removed value_deserializer to handle raw bytes manually and catch parsing errors
 )
 
 # Initialize Producer for the next topic
 producer = KafkaProducer(
     bootstrap_servers=KAFKA_BROKER,
+    api_version=(2, 8, 1),
     value_serializer=lambda v: json.dumps(v).encode('utf-8')
 )
 
@@ -39,8 +53,8 @@ def process_event(event):
 
     if event_type == "pit_stop":
         duration = event.get('pit_stop_duration', 0)
-        # Rule: Pit stop > 3.0s is slow
-        if duration > 3.0:
+        # Rule: Pit stop > SLOW_PIT_THRESHOLD is slow
+        if duration > SLOW_PIT_THRESHOLD:
             strategy_insight = {
                 "insight_type": "slow_pit",
                 "message": f"Slow pit stop detected: {duration} seconds.",
@@ -50,8 +64,8 @@ def process_event(event):
             
     elif event_type == "position_change":
         gained = event.get('position_gained', 0)
-        # Rule: Position gain >= 2 is an aggressive move
-        if gained >= 2:
+        # Rule: Position gain >= AGGRESSIVE_MOVE_THRESHOLD is an aggressive move
+        if gained >= AGGRESSIVE_MOVE_THRESHOLD:
             strategy_insight = {
                 "insight_type": "aggressive_move",
                 "message": f"Aggressive move! Gained {gained} positions.",
@@ -67,9 +81,8 @@ def process_event(event):
         driver_lap_state[driver] = current_lap
         
         if previous_lap is not None:
-            # Rule: Lap time explicitly higher means performance drop 
-            # (We set threshold of 0.5s to filter minor fluctuations)
-            if current_lap > previous_lap + 0.5:
+            # Rule: Lap time higher than threshold means performance drop
+            if current_lap > previous_lap + LAP_DROP_THRESHOLD:
                 strategy_insight = {
                     "insight_type": "performance_drop",
                     "message": f"Performance drop: Lap time increased by {round(current_lap - previous_lap, 2)}s compared to previous lap.",
