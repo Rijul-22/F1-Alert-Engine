@@ -1,7 +1,7 @@
 """
 🏎️ F1 Unified Consumer
-Combines the Strategy Engine + Alert Prioritizer + AI Broadcaster into a single pipeline.
-Reads from 'race_events' -> Processes inline -> Publishes to 'ai_insights'
+Combines the Strategy Engine + Alert Prioritizer + AI Broadcaster + DB Storage into a single pipeline.
+Reads from 'race_events' -> Processes inline -> Saves to SQLite -> Publishes to 'ai_insights'
 
 Run: python consumer/f1_unified_consumer.py
 """
@@ -11,8 +11,13 @@ import time
 import random
 import uuid
 import os
+import sys
 from kafka import KafkaConsumer, KafkaProducer
 from dotenv import load_dotenv
+
+# ── Path fix so db/ package is importable when run from any directory
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+from db.database import init_db, insert_raw_event, insert_alert
 
 # Load environment variables from .env
 load_dotenv()
@@ -45,11 +50,14 @@ producer = KafkaProducer(
     value_serializer=lambda v: json.dumps(v).encode('utf-8')
 )
 
+# ── Initialise SQLite database ────────────────────────────────────
+init_db()
+
 print("=" * 60)
 print("🏎️  F1 UNIFIED CONSUMER")
 print(f"    Reading from: '{INPUT_TOPIC}'")
 print(f"    Publishing to: '{OUTPUT_TOPIC}'")
-print("    Pipeline: Strategy Rules → Priority → AI Commentary")
+print("    Pipeline: Strategy Rules → Priority → AI Commentary → DB")
 print(f"    [Config] Slow Pit: >{SLOW_PIT_THRESHOLD}s | Lap Drop: >{LAP_DROP_THRESHOLD}s | Aggressive Move: >={AGGRESSIVE_MOVE_THRESHOLD} pos")
 print("=" * 60 + "\n")
 
@@ -167,6 +175,9 @@ try:
                 raw_event = json.loads(raw_event_bytes.decode('utf-8'))
                 driver = raw_event.get('driver_id', 'Unknown')
 
+                # ── STAGE 0: Persist raw event to DB ──
+                insert_raw_event(raw_event)
+
                 # ── STAGE 1: Apply Strategy Rules ──
                 insight = apply_strategy_rules(raw_event)
 
@@ -192,6 +203,9 @@ try:
                         alert["ai_commentary"] = alert["alert_message"]
 
                     alert["processed_at"] = time.time()
+
+                    # ── STAGE 4: Persist alert to DB ──
+                    insert_alert(alert)
 
                     # ── OUTPUT ──
                     print(f"[{priority}] {driver}: {insight['message']}")
